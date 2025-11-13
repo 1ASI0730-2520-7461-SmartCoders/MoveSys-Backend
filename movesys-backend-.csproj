@@ -18,6 +18,12 @@
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.10" />
         <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
         <PackageReference Include="Cortex.Mediator" Version="2.1.0" />
+        <!-- BCrypt para hashing de contraseñas -->
+        <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+        <!-- JSON Web Token related packages -->
+        <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.10" />
+        <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.14.0" />
     </ItemGroup>
 
 </Project>

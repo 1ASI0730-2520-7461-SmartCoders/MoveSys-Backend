@@ -4,6 +4,7 @@ using movesys_backend_.Shared.Infrastructure.Persistence.EFC;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Cortex.Mediator.DependencyInjection;
+using movesys_backend_.IAM.Infrastructure.Interfaces.ASP.Configuration.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,17 +36,29 @@ builder.Services.AddSwaggerGen(c =>
     // Configuración para mostrar ejemplos personalizados
     c.UseOneOfForPolymorphism();
     c.UseAllOfToExtendReferenceSchemas();
-    c.SchemaFilter<movesys_backend_.Users.Infrastructure.Swagger.UserCreateExampleSchemaFilter>();
 });
 
-// CORS for frontend
+// CORS for frontend - Configuración permisiva para desarrollo
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(name: allowFrontendCors, policy =>
     {
-        policy.WithOrigins(frontendOrigin)
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+        if (builder.Environment.IsDevelopment())
+        {
+            // En desarrollo, permitir cualquier origen
+            policy.AllowAnyOrigin()
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        }
+        else
+        {
+            // En producción, usar orígenes específicos
+            policy.WithOrigins(frontendOrigin, "http://localhost:5173")
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials()
+                  .SetPreflightMaxAge(TimeSpan.FromSeconds(3600));
+        }
     });
 });
 
@@ -61,8 +74,18 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     else
     {
         var mySqlCs = builder.Configuration.GetConnectionString("MySql") ?? "Server=127.0.0.1;Port=3306;Database=movesys;User=root;Password=;";
-        var serverVersion = ServerVersion.AutoDetect(mySqlCs);
-        options.UseMySql(mySqlCs, serverVersion);
+        // Usar una versión específica de MySQL en lugar de AutoDetect para evitar errores de conexión durante la configuración
+        // FreeSQLDatabase generalmente usa MySQL 8.0
+        // Usar MySQL 5.7 para compatibilidad con FreeSQLDatabase (no soporta datetime(6))
+        var serverVersion = ServerVersion.Parse("5.7.40-mysql");
+        options.UseMySql(mySqlCs, serverVersion, mySqlOptions =>
+        {
+            // Habilitar reintentos automáticos para errores transitorios
+            mySqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorNumbersToAdd: null);
+        });
     }
 });
 
@@ -70,6 +93,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddCortexMediator(
     configuration: builder.Configuration,
     handlerAssemblyMarkerTypes: [typeof(Program)]);
+
+// Register IAM Context Services
+builder.AddIamContextServices();
 
 // Register Shared and Bounded Context services (Repositories, UoW, Services)
 builder.Services.AddScoped<movesys_backend_.Shared.Domain.Repositories.IUnitOfWork, movesys_backend_.Shared.Infrastructure.Persistence.EFC.Configuration.UnitOfWork>();
@@ -79,9 +105,9 @@ builder.Services.AddScoped<movesys_backend_.Fleet.Application.Internal.QueryServ
 builder.Services.AddScoped<movesys_backend_.Deliveries.Domain.Repositories.IDeliveryRepository, movesys_backend_.Deliveries.Infrastructure.Persistence.EFC.Repositories.DeliveryRepository>();
 builder.Services.AddScoped<movesys_backend_.Deliveries.Application.Internal.CommandServices.IDeliveryCommandService, movesys_backend_.Deliveries.Application.Internal.CommandServices.DeliveryCommandService>();
 builder.Services.AddScoped<movesys_backend_.Deliveries.Application.Internal.QueryServices.IDeliveryQueryService, movesys_backend_.Deliveries.Application.Internal.QueryServices.DeliveryQueryService>();
-builder.Services.AddScoped<movesys_backend_.Users.Domain.Repositories.IUserRepository, movesys_backend_.Users.Infrastructure.Persistence.EFC.Repositories.UserRepository>();
-builder.Services.AddScoped<movesys_backend_.Users.Application.Internal.CommandServices.IUserCommandService, movesys_backend_.Users.Application.Internal.CommandServices.UserCommandService>();
-builder.Services.AddScoped<movesys_backend_.Users.Application.Internal.QueryServices.IUserQueryService, movesys_backend_.Users.Application.Internal.QueryServices.UserQueryService>();
+builder.Services.AddScoped<movesys_backend_.Conductores.Domain.Repositories.IConductorRepository, movesys_backend_.Conductores.Infrastructure.Persistence.EFC.Repositories.ConductorRepository>();
+builder.Services.AddScoped<movesys_backend_.Conductores.Application.Internal.CommandServices.IConductorCommandService, movesys_backend_.Conductores.Application.Internal.CommandServices.ConductorCommandService>();
+builder.Services.AddScoped<movesys_backend_.Conductores.Application.Internal.QueryServices.IConductorQueryService, movesys_backend_.Conductores.Application.Internal.QueryServices.ConductorQueryService>();
 builder.Services.AddScoped<movesys_backend_.FuelConsumption.Domain.Repositories.IFuelEntryRepository, movesys_backend_.FuelConsumption.Infrastructure.Persistence.EFC.Repositories.FuelEntryRepository>();
 builder.Services.AddScoped<movesys_backend_.FuelConsumption.Application.Internal.CommandServices.IFuelEntryCommandService, movesys_backend_.FuelConsumption.Application.Internal.CommandServices.FuelEntryCommandService>();
 builder.Services.AddScoped<movesys_backend_.FuelConsumption.Application.Internal.QueryServices.IFuelEntryQueryService, movesys_backend_.FuelConsumption.Application.Internal.QueryServices.FuelEntryQueryService>();
@@ -91,12 +117,12 @@ builder.Services.AddScoped<movesys_backend_.Maintenance.Application.Internal.Que
 builder.Services.AddScoped<movesys_backend_.Reports.Application.Internal.QueryServices.IReportsQueryService, movesys_backend_.Reports.Application.Internal.QueryServices.ReportsQueryService>();
 
 // Register Command/Query Handlers (Manual registration since we're using a hybrid approach)
-builder.Services.AddScoped<movesys_backend_.Users.Application.Internal.Handlers.CreateUserCommandHandler>();
-builder.Services.AddScoped<movesys_backend_.Users.Application.Internal.Handlers.UpdateUserCommandHandler>();
-builder.Services.AddScoped<movesys_backend_.Users.Application.Internal.Handlers.DeleteUserCommandHandler>();
-builder.Services.AddScoped<movesys_backend_.Users.Application.Internal.Handlers.UpdateUserStatusCommandHandler>();
-builder.Services.AddScoped<movesys_backend_.Users.Application.Internal.Handlers.GetAllUsersQueryHandler>();
-builder.Services.AddScoped<movesys_backend_.Users.Application.Internal.Handlers.GetUserByIdQueryHandler>();
+builder.Services.AddScoped<movesys_backend_.Conductores.Application.Internal.Handlers.CreateConductorCommandHandler>();
+builder.Services.AddScoped<movesys_backend_.Conductores.Application.Internal.Handlers.UpdateConductorCommandHandler>();
+builder.Services.AddScoped<movesys_backend_.Conductores.Application.Internal.Handlers.DeleteConductorCommandHandler>();
+builder.Services.AddScoped<movesys_backend_.Conductores.Application.Internal.Handlers.UpdateConductorStatusCommandHandler>();
+builder.Services.AddScoped<movesys_backend_.Conductores.Application.Internal.Handlers.GetAllConductoresQueryHandler>();
+builder.Services.AddScoped<movesys_backend_.Conductores.Application.Internal.Handlers.GetConductorByIdQueryHandler>();
 
 // Event Handlers are automatically registered by AddCortexMediator
 
@@ -128,48 +154,70 @@ using (var scope = app.Services.CreateScope())
             var allTablesExist = true;
             var missingTables = new List<string>();
             
-            // Verificar Vehicles
+            // Verificar iam_users (IAM Module)
             try
             {
-                ctx.Database.ExecuteSqlRaw("SELECT 1 FROM Vehicles LIMIT 1;");
+                ctx.Database.ExecuteSqlRaw("SELECT 1 FROM iam_users LIMIT 1;");
             }
             catch
             {
                 allTablesExist = false;
-                missingTables.Add("Vehicles");
+                missingTables.Add("iam_users");
             }
             
-            // Verificar Deliveries
+            // Verificar drivers (Conductores Module)
             try
             {
-                ctx.Database.ExecuteSqlRaw("SELECT 1 FROM Deliveries LIMIT 1;");
+                ctx.Database.ExecuteSqlRaw("SELECT 1 FROM drivers LIMIT 1;");
             }
             catch
             {
                 allTablesExist = false;
-                missingTables.Add("Deliveries");
+                missingTables.Add("drivers");
             }
             
-            // Verificar FuelEntries
+            // Verificar vehicles (Fleet Module)
             try
             {
-                ctx.Database.ExecuteSqlRaw("SELECT 1 FROM FuelEntries LIMIT 1;");
+                ctx.Database.ExecuteSqlRaw("SELECT 1 FROM vehicles LIMIT 1;");
             }
             catch
             {
                 allTablesExist = false;
-                missingTables.Add("FuelEntries");
+                missingTables.Add("vehicles");
             }
             
-            // Verificar MaintenanceRecords
+            // Verificar deliveries (Deliveries Module)
             try
             {
-                ctx.Database.ExecuteSqlRaw("SELECT 1 FROM MaintenanceRecords LIMIT 1;");
+                ctx.Database.ExecuteSqlRaw("SELECT 1 FROM deliveries LIMIT 1;");
             }
             catch
             {
                 allTablesExist = false;
-                missingTables.Add("MaintenanceRecords");
+                missingTables.Add("deliveries");
+            }
+            
+            // Verificar fuel_entries (FuelConsumption Module)
+            try
+            {
+                ctx.Database.ExecuteSqlRaw("SELECT 1 FROM fuel_entries LIMIT 1;");
+            }
+            catch
+            {
+                allTablesExist = false;
+                missingTables.Add("fuel_entries");
+            }
+            
+            // Verificar maintenance_records (Maintenance Module)
+            try
+            {
+                ctx.Database.ExecuteSqlRaw("SELECT 1 FROM maintenance_records LIMIT 1;");
+            }
+            catch
+            {
+                allTablesExist = false;
+                missingTables.Add("maintenance_records");
             }
             
             if (!allTablesExist)
@@ -183,11 +231,20 @@ using (var scope = app.Services.CreateScope())
                     try
                     {
                         ctx.Database.ExecuteSqlRaw("SET FOREIGN_KEY_CHECKS = 0;");
+                        // Eliminar tablas antiguas (si existen)
                         ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS Deliveries;");
                         ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS Vehicles;");
-                        ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS Users;");
+                        ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS Conductores;");
                         ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS FuelEntries;");
                         ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS MaintenanceRecords;");
+                        ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS IamUsers;");
+                        // Eliminar tablas nuevas (si existen)
+                        ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS iam_users;");
+                        ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS drivers;");
+                        ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS vehicles;");
+                        ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS deliveries;");
+                        ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS fuel_entries;");
+                        ctx.Database.ExecuteSqlRaw("DROP TABLE IF EXISTS maintenance_records;");
                         ctx.Database.ExecuteSqlRaw("SET FOREIGN_KEY_CHECKS = 1;");
                         
                         logger.LogInformation("Recreando todas las tablas...");
@@ -206,59 +263,8 @@ using (var scope = app.Services.CreateScope())
             {
                 logger.LogInformation(" Todas las tablas existen");
                 
-                // En desarrollo, eliminar columnas que no deberían existir en Users
-                if (app.Environment.IsDevelopment())
-                {
-                    try
-                    {
-                        // Verificar si existe la columna Email
-                        var emailColumnExists = false;
-                        try
-                        {
-                            ctx.Database.ExecuteSqlRaw("SELECT Email FROM Users LIMIT 1;");
-                            emailColumnExists = true;
-                        }
-                        catch
-                        {
-                            emailColumnExists = false;
-                        }
-                        
-                        // Verificar si existe la columna Password
-                        var passwordColumnExists = false;
-                        try
-                        {
-                            ctx.Database.ExecuteSqlRaw("SELECT Password FROM Users LIMIT 1;");
-                            passwordColumnExists = true;
-                        }
-                        catch
-                        {
-                            passwordColumnExists = false;
-                        }
-                        
-                        // Eliminar columnas si existen
-                        if (emailColumnExists || passwordColumnExists)
-                        {
-                            logger.LogInformation("Eliminando columnas Email y Password de la tabla Users...");
-                            
-                            if (emailColumnExists)
-                            {
-                                ctx.Database.ExecuteSqlRaw("ALTER TABLE Users DROP COLUMN Email;");
-                                logger.LogInformation(" Columna Email eliminada");
-                            }
-                            
-                            if (passwordColumnExists)
-                            {
-                                ctx.Database.ExecuteSqlRaw("ALTER TABLE Users DROP COLUMN Password;");
-                                logger.LogInformation(" Columna Password eliminada");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning($"⚠️ No se pudieron eliminar las columnas Email/Password: {ex.Message}");
-                        // No lanzamos excepción, solo registramos un warning
-                    }
-                }
+                // Todas las tablas (iam_users, drivers, vehicles, deliveries, fuel_entries, maintenance_records) 
+                // se crean automáticamente con EnsureCreated()
             }
         }
     }
@@ -271,6 +277,9 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline.
+// CORS debe estar al principio, antes de cualquier otro middleware
+app.UseCors(allowFrontendCors);
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -278,8 +287,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
-app.UseCors(allowFrontendCors);
+// HttpsRedirection puede causar problemas con CORS, comentarlo en desarrollo si es necesario
+// app.UseHttpsRedirection();
+
 app.UseAuthorization();
 app.MapControllers();
 app.Run();
