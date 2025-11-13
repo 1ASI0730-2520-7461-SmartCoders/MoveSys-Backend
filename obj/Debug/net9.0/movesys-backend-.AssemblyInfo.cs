@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("movesys-backend-")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+45135b4e00f618719c9ad02c8c39c37ba4204dfc")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f544fefa5efb99fc20f6b069713b803a344392ca")]
 [assembly: System.Reflection.AssemblyProductAttribute("movesys-backend-")]
 [assembly: System.Reflection.AssemblyTitleAttribute("movesys-backend-")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
