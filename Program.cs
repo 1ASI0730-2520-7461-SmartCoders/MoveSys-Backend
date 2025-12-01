@@ -61,8 +61,16 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     else
     {
         var mySqlCs = builder.Configuration.GetConnectionString("MySql") ?? "Server=127.0.0.1;Port=3306;Database=movesys;User=root;Password=;";
-        var serverVersion = ServerVersion.AutoDetect(mySqlCs);
-        options.UseMySql(mySqlCs, serverVersion);
+        // Usar MySQL 5.7 para compatibilidad con FreeSQLDatabase (no soporta datetime(6))
+        var serverVersion = ServerVersion.Parse("5.7.40-mysql");
+        options.UseMySql(mySqlCs, serverVersion, mySqlOptions =>
+        {
+            // Habilitar reintentos automáticos para errores transitorios
+            mySqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorNumbersToAdd: null);
+        });
     }
 });
 
